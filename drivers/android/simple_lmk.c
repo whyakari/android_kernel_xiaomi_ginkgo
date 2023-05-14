@@ -7,8 +7,11 @@
 
 #include <linux/kthread.h>
 #include <linux/mm.h>
+#include <linux/mmu_notifier.h>
 #include <linux/moduleparam.h>
 #include <linux/oom.h>
+#include <linux/ratelimit.h>
+#include <linux/sched/mm.h>
 #include <linux/sort.h>
 #include <linux/vmpressure.h>
 #include <uapi/linux/sched/types.h>
@@ -48,10 +51,13 @@ static const unsigned short adjs[] = {
 
 static struct victim_info victims[MAX_VICTIMS];
 static DECLARE_WAIT_QUEUE_HEAD(oom_waitq);
+static DECLARE_WAIT_QUEUE_HEAD(reaper_waitq);
 static DECLARE_COMPLETION(reclaim_done);
 static DEFINE_RWLOCK(mm_free_lock);
 static int nr_victims;
+static bool reclaim_active;
 static atomic_t needs_reclaim = ATOMIC_INIT(0);
+static atomic_t needs_reap = ATOMIC_INIT(0);
 static atomic_t nr_killed = ATOMIC_INIT(0);
 
 static int victim_size_cmp(const void *lhs_ptr, const void *rhs_ptr)
@@ -168,6 +174,16 @@ static int process_victims(int vlen, unsigned long pages_needed)
 }
 
 static void scan_and_kill(unsigned long pages_needed)
+static void set_task_rt_prio(struct task_struct *tsk, int priority)
+{
+	const struct sched_param rt_prio = {
+		.sched_priority = priority
+	};
+
+	sched_setscheduler_nocheck(tsk, SCHED_RR, &rt_prio);
+}
+
+static void scan_and_kill(void)
 {
 	int i, nr_to_kill = 0, nr_found = 0;
 	unsigned long pages_found = 0;
@@ -182,6 +198,16 @@ static void scan_and_kill(unsigned long pages_needed)
 	rcu_read_unlock();
 
 	/* Pretty unlikely but it can happen */
+	/*
+	 * Reset nr_victims so the reaper thread and simple_lmk_mm_freed() are
+	 * aware that the victims array is no longer valid.
+	 */
+	write_lock(&mm_free_lock);
+	nr_victims = 0;
+	write_unlock(&mm_free_lock);
+
+	/* Populate the victims array with tasks sorted by adj and then size */
+	pages_found = find_victims(&nr_found);
 	if (unlikely(!nr_found)) {
 		pr_err("No processes available to kill!\n");
 		return;
@@ -200,9 +226,13 @@ static void scan_and_kill(unsigned long pages_needed)
 	/* Second round of victim processing to finally select the victims */
 	nr_to_kill = process_victims(nr_to_kill, pages_needed);
 
-	/* Store the final number of victims for simple_lmk_mm_freed() */
+	/*
+	 * Store the final number of victims for simple_lmk_mm_freed() and the
+	 * reaper thread, and indicate that reclaim is active.
+	 */
 	write_lock(&mm_free_lock);
 	nr_victims = nr_to_kill;
+	reclaim_active = true;
 	write_unlock(&mm_free_lock);
 
 	/* Kill the victims */
@@ -210,10 +240,14 @@ static void scan_and_kill(unsigned long pages_needed)
 		static const struct sched_param sched_zero_prio;
 		struct victim_info *victim = &victims[i];
 		struct task_struct *t, *vtsk = victim->tsk;
+		struct mm_struct *mm = victim->mm;
 
 		pr_info("Killing %s with adj %d to free %lu KiB\n", vtsk->comm,
 			vtsk->signal->oom_score_adj,
 			victim->size << (PAGE_SHIFT - 10));
+
+		/* Make the victim reap anonymous memory first in exit_mmap() */
+		set_bit(MMF_OOM_VICTIM, &mm->flags);
 
 		/* Accelerate the victim's death by forcing the kill signal */
 		do_send_sig_info(SIGKILL, SEND_SIG_FORCED, vtsk, true);
@@ -222,6 +256,8 @@ static void scan_and_kill(unsigned long pages_needed)
 		rcu_read_lock();
 		for_each_thread(vtsk, t)
 			set_tsk_thread_flag(t, TIF_MEMDIE);
+		for_each_thread(vtsk, t)
+			set_task_rt_prio(t, 1);
 		rcu_read_unlock();
 
 		/* Elevate the victim to SCHED_RR with zero RT priority */
@@ -230,15 +266,38 @@ static void scan_and_kill(unsigned long pages_needed)
 		/* Allow the victim to run on any CPU. This won't schedule. */
 		set_cpus_allowed_ptr(vtsk, cpu_all_mask);
 
+		/* Signals can't wake frozen tasks; only a thaw operation can */
+		__thaw_task(vtsk);
+
+		/* Store the number of anon pages to sort victims for reaping */
+		victim->size = get_mm_counter(mm, MM_ANONPAGES);
+
 		/* Finally release the victim's task lock acquired earlier */
 		task_unlock(vtsk);
 	}
 
+	/*
+	 * Sort the victims by descending order of anonymous pages so the reaper
+	 * thread can prioritize reaping the victims with the most anonymous
+	 * pages first. Then wake the reaper thread if it's asleep. The lock
+	 * orders the needs_reap store before waitqueue_active().
+	 */
+	write_lock(&mm_free_lock);
+	sort(victims, nr_to_kill, sizeof(*victims), victim_cmp, victim_swap);
+	atomic_set(&needs_reap, 1);
+	write_unlock(&mm_free_lock);
+	if (waitqueue_active(&reaper_waitq))
+		wake_up(&reaper_waitq);
+
 	/* Wait until all the victims die or until the timeout is reached */
 	wait_for_completion_timeout(&reclaim_done, RECLAIM_EXPIRES);
+	if (!wait_for_completion_timeout(&reclaim_done, RECLAIM_EXPIRES))
+		pr_info("Timeout hit waiting for victims to die, proceeding\n");
+
+	/* Clean up for future reclaims but let the reaper thread keep going */
 	write_lock(&mm_free_lock);
 	reinit_completion(&reclaim_done);
-	nr_victims = 0;
+	reclaim_active = false;
 	nr_killed = (atomic_t)ATOMIC_INIT(0);
 	write_unlock(&mm_free_lock);
 }
@@ -250,6 +309,9 @@ static int simple_lmk_reclaim_thread(void *data)
 	};
 
 	sched_setscheduler_nocheck(current, SCHED_FIFO, &sched_max_rt_prio);
+	/* Use maximum RT priority */
+	set_task_rt_prio(current, MAX_RT_PRIO - 1);
+	set_freezable();
 
 	while (1) {
 		wait_event(oom_waitq, atomic_read(&needs_reclaim));
@@ -260,15 +322,124 @@ static int simple_lmk_reclaim_thread(void *data)
 	return 0;
 }
 
+static struct mm_struct *next_reap_victim(void)
+{
+	struct mm_struct *mm = NULL;
+	bool should_retry = false;
+	int i;
+
+	/* Take a write lock so no victim's mm can be freed while scanning */
+	write_lock(&mm_free_lock);
+	for (i = 0; i < nr_victims; i++, mm = NULL) {
+		/* Check if this victim is alive and hasn't been reaped yet */
+		mm = victims[i].mm;
+		if (!mm || test_bit(MMF_OOM_SKIP, &mm->flags))
+			continue;
+
+		/* Do a trylock so the reaper thread doesn't sleep */
+		if (!down_read_trylock(&mm->mmap_sem)) {
+			should_retry = true;
+			continue;
+		}
+
+		/* Skip any mm with notifiers for now since they can sleep */
+		if (mm_has_notifiers(mm)) {
+			up_read(&mm->mmap_sem);
+			should_retry = true;
+			continue;
+		}
+
+		/*
+		 * Check MMF_OOM_SKIP again under the lock in case this mm was
+		 * reaped by exit_mmap() and then had its page tables destroyed.
+		 * No mmgrab() is needed because the reclaim thread sets
+		 * MMF_OOM_VICTIM under task_lock() for the mm's task, which
+		 * guarantees that MMF_OOM_VICTIM is always set before the
+		 * victim mm can enter exit_mmap(). Therefore, an mmap read lock
+		 * is sufficient to keep the mm struct itself from being freed.
+		 */
+		if (!test_bit(MMF_OOM_SKIP, &mm->flags))
+			break;
+		up_read(&mm->mmap_sem);
+	}
+
+	if (!mm) {
+		if (should_retry)
+			/* Return ERR_PTR(-EAGAIN) to try reaping again later */
+			mm = ERR_PTR(-EAGAIN);
+		else if (!reclaim_active)
+			/*
+			 * Nothing left to reap, so stop simple_lmk_mm_freed()
+			 * from iterating over the victims array since reclaim
+			 * is no longer active. Return NULL to stop reaping.
+			 */
+			nr_victims = 0;
+	}
+	write_unlock(&mm_free_lock);
+
+	return mm;
+}
+
+static void reap_victims(void)
+{
+	struct mm_struct *mm;
+
+	while ((mm = next_reap_victim())) {
+		if (IS_ERR(mm)) {
+			/* Wait one jiffy before trying to reap again */
+			schedule_timeout_uninterruptible(1);
+			continue;
+		}
+
+		/*
+		 * Reap the victim, then unflag the mm for exit_mmap() reaping
+		 * and mark it as reaped with MMF_OOM_SKIP.
+		 */
+		__oom_reap_task_mm(mm);
+		clear_bit(MMF_OOM_VICTIM, &mm->flags);
+		set_bit(MMF_OOM_SKIP, &mm->flags);
+		up_read(&mm->mmap_sem);
+	}
+}
+
+static int simple_lmk_reaper_thread(void *data)
+{
+	/* Use a lower priority than the reclaim thread */
+	set_task_rt_prio(current, MAX_RT_PRIO - 2);
+	set_freezable();
+
+	while (1) {
+		wait_event_freezable(reaper_waitq,
+				     atomic_cmpxchg_relaxed(&needs_reap, 1, 0));
+		reap_victims();
+	}
+
+	return 0;
+}
+
 void simple_lmk_mm_freed(struct mm_struct *mm)
 {
 	int i;
 
+	/*
+	 * Victims are guaranteed to have MMF_OOM_SKIP set after exit_mmap()
+	 * finishes. Use this to ignore unrelated dying processes.
+	 */
+	if (!test_bit(MMF_OOM_SKIP, &mm->flags))
+		return;
+
 	read_lock(&mm_free_lock);
 	for (i = 0; i < nr_victims; i++) {
 		if (victims[i].mm == mm) {
+			/*
+			 * Clear out this victim from the victims array and only
+			 * increment nr_killed if reclaim is active. If reclaim
+			 * isn't active, then clearing out the victim is done
+			 * solely for the reaper thread to avoid freed victims.
+			 */
 			victims[i].mm = NULL;
-			if (atomic_inc_return_relaxed(&nr_killed) == nr_victims)
+			if (reclaim_active &&
+			    atomic_inc_return_relaxed(&nr_killed) == nr_victims)
 				complete(&reclaim_done);
 			break;
 		}
@@ -297,6 +468,9 @@ static int simple_lmk_init_set(const char *val, const struct kernel_param *kp)
 	struct task_struct *thread;
 
 	if (!atomic_cmpxchg(&init_done, 0, 1)) {
+		thread = kthread_run(simple_lmk_reaper_thread, NULL,
+				     "simple_lmkd_reaper");
+		BUG_ON(IS_ERR(thread));
 		thread = kthread_run(simple_lmk_reclaim_thread, NULL,
 				     "simple_lmkd");
 		BUG_ON(IS_ERR(thread));
