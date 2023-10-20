@@ -9,7 +9,7 @@ TC_DIR="$HOME/tc/clang-r498229"
 GCC_64_DIR="$HOME/tc/aarch64-linux-android-4.9"
 GCC_32_DIR="$HOME/tc/arm-linux-androideabi-4.9"
 AK3_DIR="$HOME/android/AnyKernel3"
-DEFCONFIG="vendor/Moe_defconfig"
+DEFCONFIG="vendor/moe_defconfig"
 
 if test -z "$(git rev-parse --show-cdup 2>/dev/null)" && head=$(git rev-parse --verify HEAD 2>/dev/null); then
     ZIPNAME="${ZIPNAME::-4}-$(echo $head | cut -c1-8).zip"
