@@ -28,6 +28,11 @@
 #include <linux/console.h>
 #include <linux/bug.h>
 #include <linux/ratelimit.h>
+
+#define CREATE_TRACE_POINTS
+#include <trace/events/exception.h>
+#include <soc/qcom/minidump.h>
+
 #include <linux/sysfs.h>
 
 #define PANIC_TIMER_STEP 100
@@ -192,6 +197,8 @@ void panic(const char *fmt, ...)
 	int state = 0;
 	int old_cpu, this_cpu;
 	bool _crash_kexec_post_notifiers = crash_kexec_post_notifiers;
+
+	trace_kernel_panic(0);
 
 	if (panic_on_warn) {
 		/*
