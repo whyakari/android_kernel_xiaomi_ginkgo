@@ -1092,9 +1092,7 @@ static int mmc_blk_ioctl_cmd(struct mmc_blk_data *md,
 		goto cmd_done;
 	}
 	idatas[0] = idata;
-	req_to_mmc_queue_req(req)->drv_op =
-		rpmb ? MMC_DRV_OP_IOCTL_RPMB : MMC_DRV_OP_IOCTL;
-	req_to_mmc_queue_req(req)->drv_op_result = -EIO;
+	req_to_mmc_queue_req(req)->drv_op = MMC_DRV_OP_IOCTL;
 	req_to_mmc_queue_req(req)->drv_op_data = idatas;
 	req_to_mmc_queue_req(req)->ioc_count = 1;
 	blk_execute_rq(mq->queue, NULL, req, 0);
@@ -1160,9 +1158,7 @@ static int mmc_blk_ioctl_multi_cmd(struct mmc_blk_data *md,
 		err = PTR_ERR(req);
 		goto cmd_err;
 	}
-	req_to_mmc_queue_req(req)->drv_op =
-		rpmb ? MMC_DRV_OP_IOCTL_RPMB : MMC_DRV_OP_IOCTL;
-	req_to_mmc_queue_req(req)->drv_op_result = -EIO;
+	req_to_mmc_queue_req(req)->drv_op = MMC_DRV_OP_IOCTL;
 	req_to_mmc_queue_req(req)->drv_op_data = idata;
 	req_to_mmc_queue_req(req)->ioc_count = num_of_cmds;
 	blk_execute_rq(mq->queue, NULL, req, 0);
@@ -1819,7 +1815,7 @@ static void mmc_blk_issue_discard_rq(struct mmc_queue *mq, struct request *req)
 					 arg == MMC_TRIM_ARG ?
 					 INAND_CMD38_ARG_TRIM :
 					 INAND_CMD38_ARG_ERASE,
-					 card->ext_csd.generic_cmd6_time);
+					 0);
 		}
 		if (!err)
 			err = mmc_erase(card, from, nr, arg);
@@ -1861,7 +1857,7 @@ retry:
 				 arg == MMC_SECURE_TRIM1_ARG ?
 				 INAND_CMD38_ARG_SECTRIM1 :
 				 INAND_CMD38_ARG_SECERASE,
-				 card->ext_csd.generic_cmd6_time);
+				 0);
 		if (err)
 			goto out_retry;
 	}
@@ -1879,7 +1875,7 @@ retry:
 			err = mmc_switch(card, EXT_CSD_CMD_SET_NORMAL,
 					 INAND_CMD38_ARG_EXT_CSD,
 					 INAND_CMD38_ARG_SECTRIM2,
-					 card->ext_csd.generic_cmd6_time);
+					 0);
 			if (err)
 				goto out_retry;
 		}
