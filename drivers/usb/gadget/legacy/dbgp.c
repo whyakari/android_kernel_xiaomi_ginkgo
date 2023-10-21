@@ -351,8 +351,6 @@ static int dbgp_setup(struct usb_gadget *gadget,
 
 			*temp = cpu_to_le16(DBGP_REQ_LEN);
 			length = DBGP_REQ_LEN;
-		} else {
-			return err;
 		}
 	}
 

@@ -2170,12 +2170,9 @@ lim_add_sta(struct mac_context *mac_ctx,
 	/* Update VHT/HT Capability */
 	if (LIM_IS_AP_ROLE(session_entry) ||
 	    LIM_IS_IBSS_ROLE(session_entry)) {
-		add_sta_params->htCapable =
-				sta_ds->mlmStaContext.htCapability &&
-				session_entry->htCapability;;
+		add_sta_params->htCapable = sta_ds->mlmStaContext.htCapability;
 		add_sta_params->vhtCapable =
-				sta_ds->mlmStaContext.vhtCapability &&
-				session_entry->vhtCapability;
+			 sta_ds->mlmStaContext.vhtCapability;
 	}
 #ifdef FEATURE_WLAN_TDLS
 	/* SystemRole shouldn't be matter if staType is TDLS peer */
@@ -2495,11 +2492,9 @@ lim_add_sta(struct mac_context *mac_ctx,
 			assoc_req =
 			(tpSirAssocReq) session_entry->parsedAssocReq[aid];
 
-			if (assoc_req) {
-				add_sta_params->wpa_rsn = assoc_req->rsnPresent;
-				add_sta_params->wpa_rsn |=
-					(assoc_req->wpaPresent << 1);
-			}
+			add_sta_params->wpa_rsn = assoc_req->rsnPresent;
+			add_sta_params->wpa_rsn |=
+				(assoc_req->wpaPresent << 1);
 		}
 	}
 
