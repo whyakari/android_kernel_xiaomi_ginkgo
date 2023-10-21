@@ -1223,6 +1223,17 @@ static ssize_t fuse_file_write_iter(struct kiocb *iocb, struct iov_iter *from)
 	ssize_t err;
 	loff_t endbyte = 0;
 
+	if (ff->passthrough.filp)
+		return fuse_passthrough_write_iter(iocb, from);
+
+	if (ff && ff->rw_lower_file) {
+		/* Update size (EOF optimization) and mode (SUID clearing) */
+		err = fuse_update_attributes(mapping->host, file);
+		if (err)
+			return err;
+
+		return fuse_shortcircuit_write_iter(iocb, from);
+	}
 	if (fuse_is_bad(inode))
 		return -EIO;
 
