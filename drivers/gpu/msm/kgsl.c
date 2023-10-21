@@ -2104,7 +2104,7 @@ static long gpumem_free_entry_on_timestamp(struct kgsl_device *device,
 	kgsl_readtimestamp(device, context, KGSL_TIMESTAMP_RETIRED, &temp);
 	trace_kgsl_mem_timestamp_queue(device, entry, context->id, temp,
 		timestamp);
-	ret = kgsl_add_low_prio_event(device, &context->events,
+	ret = kgsl_add_event(device, &context->events,
 		timestamp, gpumem_free_func, entry);
 
 	if (ret)
@@ -2367,15 +2367,6 @@ static int memdesc_sg_virt(struct kgsl_memdesc *memdesc, unsigned long useraddr)
 
 	ret = sg_alloc_table_from_pages(memdesc->sgt, pages, npages,
 					0, memdesc->size, GFP_KERNEL);
-
-	if (ret)
-		goto out;
-
-	ret = kgsl_cache_range_op(memdesc, 0, memdesc->size,
-			KGSL_CACHE_OP_FLUSH);
-
-	if (ret)
-		sg_free_table(memdesc->sgt);
 out:
 	if (ret) {
 		for (i = 0; i < npages; i++)
@@ -5036,7 +5027,7 @@ int kgsl_device_platform_probe(struct kgsl_device *device)
 
 	status = devm_request_irq(device->dev, device->pwrctrl.interrupt_num,
 				  kgsl_irq_handler,
-				  IRQF_TRIGGER_HIGH | IRQF_PERF_AFFINE,
+				  IRQF_TRIGGER_HIGH | IRQF_PERF_CRITICAL,
 				  device->name, device);
 	if (status) {
 		KGSL_DRV_ERR(device, "request_irq(%d) failed: %d\n",
@@ -5173,24 +5164,6 @@ static void kgsl_core_exit(void)
 	unregister_chrdev_region(kgsl_driver.major, KGSL_DEVICE_MAX);
 }
 
-static long kgsl_run_one_worker(struct kthread_worker *worker,
-		struct task_struct **thread, const char *name,
-		const bool perf_crit)
-{
-	kthread_init_worker(worker);
-
-	*thread = perf_crit ? kthread_run_perf_critical(
-		cpu_perf_mask, kthread_worker_fn, worker, name)
-		: kthread_run(kthread_worker_fn, worker, name);
-
-	if (IS_ERR(*thread)) {
-		pr_err("unable to start %s\n", name);
-		return PTR_ERR(thread);
-	}
-
-	return 0;
-}
-
 static int __init kgsl_core_init(void)
 {
 	int result = 0;
@@ -5264,16 +5237,17 @@ static int __init kgsl_core_init(void)
 	kgsl_driver.mem_workqueue = alloc_workqueue("kgsl-mementry",
 		WQ_UNBOUND | WQ_MEM_RECLAIM | WQ_FREEZABLE, 0);
 
-	if (IS_ERR_VALUE(kgsl_run_one_worker(&kgsl_driver.worker,
-			&kgsl_driver.worker_thread,
-			"kgsl_worker_thread", true)) ||
-		IS_ERR_VALUE(kgsl_run_one_worker(&kgsl_driver.low_prio_worker,
-			&kgsl_driver.low_prio_worker_thread,
-			"kgsl_low_prio_worker_thread", false)))
+	kthread_init_worker(&kgsl_driver.worker);
+
+	kgsl_driver.worker_thread = kthread_run_perf_critical(kthread_worker_fn,
+		&kgsl_driver.worker, "kgsl_worker_thread");
+
+	if (IS_ERR(kgsl_driver.worker_thread)) {
+		pr_err("unable to start kgsl thread\n");
 		goto err;
+	}
 
 	sched_setscheduler(kgsl_driver.worker_thread, SCHED_RR, &param);
-	/* kgsl_driver.low_prio_worker_thread should not be SCHED_RR */
 
 	kgsl_events_init();
 

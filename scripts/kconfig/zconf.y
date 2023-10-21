@@ -31,7 +31,7 @@ struct symbol *symbol_hash[SYMBOL_HASHSIZE];
 static struct menu *current_menu, *current_entry;
 
 %}
-%expect 30
+%expect 31
 
 %union
 {
@@ -112,7 +112,7 @@ start: mainmenu_stmt stmt_list | no_mainmenu_stmt stmt_list;
 
 /* mainmenu entry */
 
-mainmenu_stmt: T_MAINMENU prompt T_EOL
+mainmenu_stmt: T_MAINMENU prompt nl
 {
 	menu_add_prompt(P_MENU, $2, NULL);
 };
