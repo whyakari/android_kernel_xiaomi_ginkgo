@@ -5,7 +5,7 @@
 
 SECONDS=0 # builtin bash timer
 ZIPNAME="Moe-no-KSU-$(date '+%Y%m%d').zip"
-TC_DIR="$HOME/tc/clang-r498229b"
+TC_DIR="$HOME/tc/clang-18.0.0"
 GCC_64_DIR="$HOME/tc/aarch64-linux-android-4.9"
 GCC_32_DIR="$HOME/tc/arm-linux-androideabi-4.9"
 AK3_DIR="$HOME/android/AnyKernel3"
