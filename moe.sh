@@ -91,8 +91,18 @@ if [ -f "out/arch/arm64/boot/Image.gz-dtb" ] && \
         echo -e "\nAnyKernel3 repo not found locally and cloning failed! Aborting..."
         exit 1
     fi
-    cp out/arch/arm64/boot/Image.gz-dtb AnyKernel3
-    cp out/arch/arm64/boot/dtbo.img AnyKernel3
+
+	if [[ $1 = "-meme" || $1 = "--miui" ]]; then
+		# MIUI
+		cp out/arch/arm64/boot/dts/xiaomi/qcom-base/trinket.dtb  AnyKernel3/dtb
+		cp out/arch/arm64/boot/Image.gz-dtb AnyKernel3
+		cp out/arch/arm64/boot/dtbo.img AnyKernel3	
+	else 
+		# AOSP
+		cp out/arch/arm64/boot/Image.gz-dtb AnyKernel3
+		cp out/arch/arm64/boot/dtbo.img AnyKernel3
+	fi
+
     rm -f *zip
     cd AnyKernel3
     git checkout master &> /dev/null
