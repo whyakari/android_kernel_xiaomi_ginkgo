@@ -6,7 +6,7 @@
 SECONDS=0 # builtin bash timer
 ZIPNAME="Moe-$(date '+%Y%m%d').zip"
 TC_DIR="$HOME/tc/clang-18.0.0"
-GCC_64_DIR="$HOME/tc/aarch64-linux-android-4.9"
+GCC_64_DIR="$HOME/tc/aarch64-linux-android-9.3"
 GCC_32_DIR="$HOME/tc/arm-linux-androideabi-4.9"
 AK3_DIR="$HOME/android/AnyKernel3"
 DEFCONFIG="vendor/moe_defconfig"
@@ -30,7 +30,7 @@ fi
 
 if ! [ -d "${GCC_64_DIR}" ]; then
     echo "gcc not found! Cloning to ${GCC_64_DIR}..."
-    if ! git clone --depth=1 -b lineage-19.1 https://github.com/LineageOS/android_prebuilts_gcc_linux-x86_aarch64_aarch64-linux-android-4.9.git ${GCC_64_DIR}; then
+    if ! git clone --depth=1 -b lineage-21.0 https://github.com/LineageOS/android_prebuilts_gcc_linux-x86_aarch64_aarch64-linux-gnu-9.3.git ${GCC_64_DIR}; then
         echo "Cloning failed! Aborting..."
         exit 1
     fi
