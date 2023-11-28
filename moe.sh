@@ -5,11 +5,9 @@
 
 SECONDS=0 # builtin bash timer
 ZIPNAME="Moe-$(date '+%Y%m%d').zip"
-LINKER="ld.lld"
-USE_LLVM=0
 TC_DIR="$HOME/tc/clang-18.0.0"
-GCC_64_DIR="$HOME/tc/aarch64-linux-android-14.0"
-GCC_32_DIR="$HOME/tc/arm-linux-androideabi-14.0"
+GCC_64_DIR="$HOME/tc/aarch64-linux-android-4.9"
+GCC_32_DIR="$HOME/tc/arm-linux-androideabi-4.9"
 AK3_DIR="$HOME/android/AnyKernel3"
 DEFCONFIG="vendor/moe_defconfig"
 
@@ -17,7 +15,7 @@ if test -z "$(git rev-parse --show-cdup 2>/dev/null)" && head=$(git rev-parse --
     ZIPNAME="${ZIPNAME::-4}-$(echo $head | cut -c1-8).zip"
 fi
 
-# export PATH="$TC_DIR/bin:$PATH"
+export PATH="$TC_DIR/bin:$PATH"
 
 export KBUILD_BUILD_USER=Moe
 export KBUILD_BUILD_HOST=Nyan
@@ -32,7 +30,7 @@ fi
 
 if ! [ -d "${GCC_64_DIR}" ]; then
     echo "gcc not found! Cloning to ${GCC_64_DIR}..."
-    if ! git clone --depth=1 -b 14 https://github.com/ZyCromerZ/aarch64-zyc-linux-gnu ${GCC_64_DIR}; then
+    if ! git clone --depth=1 -b lineage-19.1 https://github.com/LineageOS/android_prebuilts_gcc_linux-x86_aarch64_aarch64-linux-android-4.9.git ${GCC_64_DIR}; then
         echo "Cloning failed! Aborting..."
         exit 1
     fi
@@ -40,7 +38,7 @@ fi
 
 if ! [ -d "${GCC_32_DIR}" ]; then
     echo "gcc_32 not found! Cloning to ${GCC_32_DIR}..."
-    if ! git clone --depth=1 -b 14 https://github.com/ZyCromerZ/arm-zyc-linux-gnueabi ${GCC_32_DIR}; then
+    if ! git clone --depth=1 -b lineage-19.1 https://github.com/LineageOS/android_prebuilts_gcc_linux-x86_arm_arm-linux-androideabi-4.9.git ${GCC_32_DIR}; then
         echo "Cloning failed! Aborting..."
         exit 1
     fi
@@ -68,39 +66,21 @@ else
 fi
 
 echo -e "\nStarting compilation... wait\n"
-if [ "$USE_LLVM" -eq 1 ]; then 
-	PATH="$TC_DIR/bin:$PATH" \
-	make -j$(nproc --all) \
-	O=out \
-	ARCH=arm64 \
-	CC="clang" \
-	LD="${LINKER}" \
-	AR=llvm-ar \
-	AS=llvm-as \
-	NM=llvm-nm \
-	OBJCOPY=llvm-objcopy \
-	OBJDUMP=llvm-objdump \
-	STRIP=llvm-strip \
-	CLANG_TRIPLE=aarch64-linux-gnu- \
-	CROSS_COMPILE=bin/aarch64-linux-gnu- \
-	CROSS_COMPILE_ARM32=arm-linux-gnueabihf- \
-	CONFIG_NO_ERROR_ON_MISMATCH=y \
-	CONFIG_DEBUG_SECTION_MISMATCH=y \
-	Image.gz-dtb dtbo.img
-else
-    PATH="$TC_DIR/bin:$PATH" \
-    make -j"$PROCS" \
-	O=out \
-    ARCH=${ARCH} \
-    CC="clang" \
+make -j$(nproc --all) \
+    O=out \
+    ARCH=arm64 \
+    CC=clang \
+    LD=ld.lld \
+    AR=llvm-ar \
+    AS=llvm-as \
+    NM=llvm-nm \
+    OBJCOPY=llvm-objcopy \
+    OBJDUMP=llvm-objdump \
+    STRIP=llvm-strip \
+    CROSS_COMPILE=$GCC_64_DIR/bin/aarch64-linux-android- \
+    CROSS_COMPILE_ARM32=$GCC_32_DIR/bin/arm-linux-androideabi- \
     CLANG_TRIPLE=aarch64-linux-gnu- \
-    CROSS_COMPILE=aarch64-linux-gnu- \
-    CROSS_COMPILE_ARM32=arm-linux-gnueabihf- \
-    CONFIG_NO_ERROR_ON_MISMATCH=y \
-    CONFIG_DEBUG_SECTION_MISMATCH=y \
-	Image.gz-dtb dtbo.img \
-    V=0 2>&1 | tee out/build.log
-fi
+    Image.gz-dtb dtbo.img
 
 if [ -f "out/arch/arm64/boot/Image.gz-dtb" ] && \
    [ -f "out/arch/arm64/boot/dtbo.img" ]; then
