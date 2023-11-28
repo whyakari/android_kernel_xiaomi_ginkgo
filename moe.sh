@@ -3,11 +3,11 @@
 # Compile script for MoeKernel🐇
 # Copyright (C) 2020-2021 Adithya R.
 
-SECONDS=0 # builtin bash timer
+SECONDS=0
 ZIPNAME="Moe-no-KSU-$(date '+%Y%m%d').zip"
 TC_DIR="$HOME/tc/clang-18.0.0"
-GCC_64_DIR="$HOME/tc/aarch64-linux-android-4.9"
-GCC_32_DIR="$HOME/tc/arm-linux-androideabi-4.9"
+GCC_64_DIR="$HOME/tc/aarch64-linux-android-14.0"
+GCC_32_DIR="$HOME/tc/arm-linux-androideabi-14.0"
 AK3_DIR="$HOME/android/AnyKernel3"
 DEFCONFIG="vendor/moe_no_ksu_defconfig"
 
@@ -30,7 +30,7 @@ fi
 
 if ! [ -d "${GCC_64_DIR}" ]; then
     echo "gcc not found! Cloning to ${GCC_64_DIR}..."
-    if ! git clone --depth=1 -b lineage-19.1 https://github.com/LineageOS/android_prebuilts_gcc_linux-x86_aarch64_aarch64-linux-android-4.9.git ${GCC_64_DIR}; then
+    if ! git clone --depth=1 -b 14 https://github.com/ZyCromerZ/aarch64-zyc-linux-gnu ${GCC_64_DIR}; then
         echo "Cloning failed! Aborting..."
         exit 1
     fi
@@ -38,7 +38,7 @@ fi
 
 if ! [ -d "${GCC_32_DIR}" ]; then
     echo "gcc_32 not found! Cloning to ${GCC_32_DIR}..."
-    if ! git clone --depth=1 -b lineage-19.1 https://github.com/LineageOS/android_prebuilts_gcc_linux-x86_arm_arm-linux-androideabi-4.9.git ${GCC_32_DIR}; then
+    if ! git clone --depth=1 -b 14 https://github.com/ZyCromerZ/arm-zyc-linux-gnueabi ${GCC_32_DIR}; then
         echo "Cloning failed! Aborting..."
         exit 1
     fi
@@ -91,18 +91,8 @@ if [ -f "out/arch/arm64/boot/Image.gz-dtb" ] && \
         echo -e "\nAnyKernel3 repo not found locally and cloning failed! Aborting..."
         exit 1
     fi
-
-	if [[ $1 = "-meme" || $1 = "--miui" ]]; then
-		# MIUI
-		cp out/arch/arm64/boot/dts/xiaomi/qcom-base/trinket.dtb  AnyKernel3/dtb
-		cp out/arch/arm64/boot/Image.gz-dtb AnyKernel3
-		cp out/arch/arm64/boot/dtbo.img AnyKernel3	
-	else 
-		# AOSP
-		cp out/arch/arm64/boot/Image.gz-dtb AnyKernel3
-		cp out/arch/arm64/boot/dtbo.img AnyKernel3
-	fi
-
+	cp out/arch/arm64/boot/Image.gz-dtb AnyKernel3
+    cp out/arch/arm64/boot/dtbo.img AnyKernel3
     rm -f *zip
     cd AnyKernel3
     git checkout master &> /dev/null
@@ -112,7 +102,6 @@ if [ -f "out/arch/arm64/boot/Image.gz-dtb" ] && \
     rm -rf out/arch/arm64/boot
     echo -e "\nCompleted in $((SECONDS / 60)) minute(s) and $((SECONDS % 60)) second(s) !"
     echo "Zip: $ZIPNAME"
-    # curl --upload-file $ZIPNAME https://temp.sh/$ZIPNAME; echo
 else
     echo -e "\nCompilation failed!"
     exit 1
