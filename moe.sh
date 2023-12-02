@@ -4,16 +4,12 @@
 # Copyright (C) 2020-2021 Adithya R.
 
 SECONDS=0
-ZIPNAME="Moe-no-KSU-$(date '+%Y%m%d').zip"
+ZIPNAME="MoeNO-KSU-$(date '+%Y%m%d').zip"
 TC_DIR="$HOME/tc/clang-18.0.0"
 GCC_64_DIR="$HOME/tc/aarch64-linux-android-14.0"
 GCC_32_DIR="$HOME/tc/arm-linux-androideabi-14.0"
 AK3_DIR="$HOME/android/AnyKernel3"
 DEFCONFIG="vendor/moe_no_ksu_defconfig"
-
-if test -z "$(git rev-parse --show-cdup 2>/dev/null)" && head=$(git rev-parse --verify HEAD 2>/dev/null); then
-    ZIPNAME="${ZIPNAME::-4}-$(echo $head | cut -c1-8).zip"
-fi
 
 export PATH="$TC_DIR/bin:$PATH"
 
@@ -91,7 +87,7 @@ if [ -f "out/arch/arm64/boot/Image.gz-dtb" ] && \
         echo -e "\nAnyKernel3 repo not found locally and cloning failed! Aborting..."
         exit 1
     fi
-	cp out/arch/arm64/boot/Image.gz-dtb AnyKernel3
+    cp out/arch/arm64/boot/Image.gz-dtb AnyKernel3
     cp out/arch/arm64/boot/dtbo.img AnyKernel3
     rm -f *zip
     cd AnyKernel3
