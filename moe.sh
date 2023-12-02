@@ -4,7 +4,7 @@
 # Copyright (C) 2020-2021 Adithya R.
 
 SECONDS=0
-ZIPNAME="Moe-$(date '+%Y%m%d').zip"
+ZIPNAME="MoeKSU-$(date '+%Y%m%d').zip"
 TC_DIR="$HOME/tc/clang-18.0.0"
 GCC_64_DIR="$HOME/tc/aarch64-linux-android-14.0"
 GCC_32_DIR="$HOME/tc/arm-linux-androideabi-14.0"
