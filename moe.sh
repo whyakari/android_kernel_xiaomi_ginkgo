@@ -25,16 +25,16 @@ if ! [ -d "${TC_DIR}" ]; then
 fi
 
 if ! [ -d "${GCC_64_DIR}" ]; then
-    echo "gcc not found! Cloning to ${GCC_64_DIR}..."
-    if ! git clone --depth=1 -b 14 https://github.com/ZyCromerZ/aarch64-zyc-linux-gnu ${GCC_64_DIR}; then
+    echo "GCC_64 not found! Cloning to ${GCC_64_DIR}..."
+    if ! git clone --depth=1 https://github.com/whyakari/gcc-arm64 ${GCC_64_DIR}; then
         echo "Cloning failed! Aborting..."
         exit 1
     fi
 fi
 
 if ! [ -d "${GCC_32_DIR}" ]; then
-    echo "gcc_32 not found! Cloning to ${GCC_32_DIR}..."
-    if ! git clone --depth=1 -b 14 https://github.com/ZyCromerZ/arm-zyc-linux-gnueabi ${GCC_32_DIR}; then
+    echo "GCC_32 not found! Cloning to ${GCC_32_DIR}..."
+    if ! git clone --depth=1 https://github.com/whyakari/gcc-arm ${GCC_32_DIR}; then
         echo "Cloning failed! Aborting..."
         exit 1
     fi
