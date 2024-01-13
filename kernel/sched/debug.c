@@ -879,8 +879,8 @@ void sysrq_sched_debug_show(void)
 		 * another CPU might be blocked waiting for us to process
 		 * an IPI or stop_machine.
 		 */
-		touch_nmi_watchdog();
-		touch_all_softlockup_watchdogs();
+		// touch_nmi_watchdog();
+		// touch_all_softlockup_watchdogs();
 		print_cpu(NULL, cpu);
 	}
 }
